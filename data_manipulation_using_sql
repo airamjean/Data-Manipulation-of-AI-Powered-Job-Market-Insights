@@ -1,0 +1,114 @@
+import os
+import sys
+
+os.environ['PYSPARK_PYTHON'] = r'C:\Users\User\AppData\Roaming\Python\Python310\python.exe'
+os.environ['PYSPARK_DRIVER_PYTHON'] = r'C:\Users\User\AppData\Roaming\Python\Python310\python.exe'
+
+# ##################################################################################
+# 1. LOAD THE PYSPARK SQL LIBRARY
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+# Create SparkSession (automatically includes SQL functionality)
+spark = SparkSession.builder.appName("MyApp").getOrCreate()
+
+# ##################################################################################
+# 2. USE SPARK'S READ METHOD
+df = spark.read.csv("C:/Users/User/Desktop/ITBD/ai_job_market_insights.csv", header=True, inferSchema=True)
+
+# ##################################################################################
+# 3. DATAFRAME TRANSFORMATION
+
+# GROUBY
+grouped_ai_adoption = df.groupby('AI_Adoption_Level')
+grouped_ai_adoption.count().show()
+
+grouped_automation_risk = df.groupby('Automation_Risk')
+grouped_ai_adoption.count().show()
+
+grouped_job_growth = df.groupby('Job_Growth_Projection')
+grouped_job_growth.count().show()
+
+grouped_company_size = df.groupby('Company_Size')
+grouped_company_size.count().show()
+
+# SELECT
+median_salary = df.select(F.percentile_approx("Salary_USD", 0.5).alias("median_salary")).collect()[0]["median_salary"]
+print("\n The median salary is: ", median_salary)
+
+# FILTER
+salaries_higherorequal_than_median = df.filter(df.Salary_USD >= median_salary)
+print(salaries_higherorequal_than_median.count())
+salaries_higherorequal_than_median.show()
+
+# ##################################################################################
+# 4. SQL queries
+
+df.createOrReplaceTempView("job_market")
+
+# AI ADOPTION
+sql_query_ai_adoption = """
+WITH high_ai_jobs AS (
+    SELECT *
+    FROM job_market
+    WHERE LOWER(AI_Adoption_Level) = 'high'
+)
+SELECT 
+    Job_Title,
+    COUNT(*) as high_count,
+    COLLECT_LIST(DISTINCT Industry) as industries_list
+FROM high_ai_jobs
+GROUP BY Job_Title
+HAVING COUNT(*) > 1
+ORDER BY high_count DESC
+LIMIT 3
+"""
+
+print("\n" + "="*80)
+print("SQL RESULTS: Jobs with Repeated 'High' AI Adoption")
+print("="*80)
+spark.sql(sql_query_ai_adoption).show(truncate=False)
+
+# AUTOMATION RISK
+sql_query_automation_risk = """
+WITH high_auto_risk AS (
+    SELECT *
+    FROM job_market
+    WHERE LOWER(Automation_Risk) = 'high')
+SELECT 
+    Job_Title,
+    COUNT(*) as high_count,
+    COLLECT_LIST(DISTINCT Industry) as industries_list
+FROM high_auto_risk
+GROUP BY Job_Title
+HAVING COUNT(*) > 1
+ORDER BY high_count DESC
+LIMIT 3
+"""
+
+print("\n" + "="*80)
+print("SQL RESULTS: Jobs with Repeated 'High' Automation Risk")
+print("="*80)
+spark.sql(sql_query_automation_risk).show(truncate=False)
+
+# JOB OPPORTUNITIES
+sql_query_job_opportunity = """
+WITH high_job_growth AS (
+    SELECT *
+    FROM job_market
+    WHERE LOWER(Job_Growth_Projection) = 'decline')
+SELECT 
+    Job_Title,
+    COUNT(*) as high_count,
+    COLLECT_LIST(DISTINCT Industry) as industries_list
+FROM high_job_growth
+GROUP BY Job_Title
+HAVING COUNT(*) > 1
+ORDER BY high_count DESC
+LIMIT 3
+"""
+
+print("\n" + "="*80)
+print("SQL RESULTS: Jobs with Repeated 'Decline' Job Growth Projection")
+print("="*80)
+spark.sql(sql_query_job_opportunity).show(truncate=False)
