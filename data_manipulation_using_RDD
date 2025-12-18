@@ -1,0 +1,115 @@
+import os
+import sys
+
+os.environ['PYSPARK_PYTHON'] = r'C:\Users\User\AppData\Roaming\Python\Python310\python.exe'
+os.environ['PYSPARK_DRIVER_PYTHON'] = r'C:\Users\User\AppData\Roaming\Python\Python310\python.exe'
+
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("JobFilter") \
+    .config("spark.executorEnv.PYSPARK_PYTHON", r'C:\Users\User\AppData\Roaming\Python\Python310\python.exe') \
+    .getOrCreate()
+
+sc = spark.sparkContext
+
+# ############################################################################################################################
+# 1. LOAD DATASET INTO PYTHON AS RDD
+rdd = sc.textFile("C:/Users/User/Desktop/ITBD/ai_job_market_insights.csv")
+header = rdd.first()  # Get header
+data = rdd.filter(lambda line: line != header)  # Skip header row
+
+print("\nFile loaded successfully. Lines: ", rdd.count())
+print("\nData value pre RDD transformation: ", rdd.collect(), "\n")
+
+# ###############################################################################################################
+# 2. USE RDD TRANSFORMATION [USED: map() and filter()]
+parsed_rdd = data.map(lambda x: x.split(","))    # to manipulate columns
+
+# HIGH AI_Adoption
+high_ai_adoption = parsed_rdd.filter(lambda row: row[4] == "High")
+
+#HIGH Automation_Risk
+high_automation_risk = parsed_rdd.filter(lambda row: row[5] == "High")
+
+job_names_high_ai = high_ai_adoption.map(lambda row: row[0]).distinct()                        # jobs with HIGH AI Adoption
+job_names_high_automation_risk = high_automation_risk.map(lambda row: row[0]).distinct()       # jobs with HIGH automation risks
+industry_high_ai = high_ai_adoption.map(lambda row: row[1]).distinct()                         # industry where AI Adoption is HIGH
+industry_high_automation_risk = high_automation_risk.map(lambda row: row[1]).distinct()        # industry with HIGH automation risk
+country_high_ai = high_ai_adoption.map(lambda row: row[3]).distinct()                          # countries where AI is frequently used
+skills_high_ai = high_ai_adoption.map(lambda row: row[6]).distinct()                           # skills where AI Adoption is HIGH
+     
+
+# ##############################################################################################
+# 3. USE RDD ACTIONS TO RETURN VALUE [count() and collect()]
+
+# JOBS WITH HIGH AI AUTOMATION
+count_dist_high_ai_jobs = job_names_high_ai.count()
+collect_dist_high_ai_jobs = job_names_high_ai.collect()
+
+# JOBS WITH HIGH AUTOMATION RISK
+count_job_high_auto_risk = job_names_high_automation_risk.count()
+collect_job_high_auto_risk = job_names_high_automation_risk.collect()
+
+# INDUSTRY WITH HIGH AI AUTOMATION
+count_dist_high_ai_indutry = industry_high_ai.count()
+collect_dist_high_ai_industry = industry_high_ai.collect()
+
+# INDUSTRY WITH HIGH AUTOMATION RISK
+count_indusry_high_auto_risk = industry_high_automation_risk.count()
+collect_industry_high_auto_risk = industry_high_automation_risk.collect()
+
+# COUNTRY WITH HIGH AI AUTOMATION
+count_dist_high_ai_country = country_high_ai.count()
+collect_dist_high_ai_country = country_high_ai.collect()
+
+# SKILLS WITH HIGH AI AUTOMATION
+count_dist_high_ai_skill = skills_high_ai.count()
+collect_dist_high_ai_skill = skills_high_ai.collect()
+
+print("\nNumber of distinct jobs with HIGH AI Adoption: ", count_dist_high_ai_jobs)
+print("Distinct jobs with HIGH AI adoption:", collect_dist_high_ai_jobs)
+print("Number of distinct jobs with HIGH Automation Risk: ", count_job_high_auto_risk)
+print("Distinct jobs with HIGH Automation Risk:", collect_job_high_auto_risk)
+
+print("\nNumber of distinct industry with HIGH AI Adoption: ", count_dist_high_ai_indutry)
+print("Distinct industry with HIGH AI adoption:", collect_dist_high_ai_industry)
+print("Number of distinct industry with HIGH Automation Risk: ", count_indusry_high_auto_risk)
+print("Distinct industry with HIGH Automation Risk:", collect_industry_high_auto_risk)
+
+print("\nNumber of distinct countries with HIGH AI Adoption: ", count_dist_high_ai_country)
+print("Distinct countries with HIGH AI adoption:", collect_dist_high_ai_country)
+
+print("\nNumber of distinct skills with HIGH AI Adoption: ", count_dist_high_ai_skill)
+print("Distinct skills with HIGH AI adoption: ", collect_dist_high_ai_skill, "\n")
+
+# ####################################################################################
+# 4. USE SORTBYKEY AND GROUPBYKEY FOR VARIABLES THAT GROUP DATA TOGETHER
+
+# Create key-value pairs
+ai_salary_pairs = parsed_rdd.map(lambda row: (float(f"{float(row[7]):.4f}"), row[4]))
+
+high_ai_salaries = ai_salary_pairs.filter(lambda x:x[1] == "High")
+low_ai_salaries = ai_salary_pairs.filter(lambda x:x[1] == "Low")
+
+highest_high_salary = high_ai_salaries.sortByKey(ascending=False).first()
+highest_low_salary = low_ai_salaries.sortByKey(ascending=False).first()
+
+print("Highest salary for HIGH AI Adoption: ", highest_high_salary[0])
+print("Highest salary for LOW AI Adoption: ", highest_low_salary[0])
+
+
+# Create key-value pairs
+ai_job_growth_pairs = parsed_rdd.map(lambda row: (row[9], row[0]))
+
+grouped_ai_job_growth = ai_job_growth_pairs.groupByKey()
+
+# Count each group
+job_growth_counts = grouped_ai_job_growth.map(
+    lambda x: (x[0], len(list(x[1])))
+).collectAsMap()
+
+print("Job Growth Level Counts:")
+print("=" * 30)
+for level, count in sorted(job_growth_counts.items()):
+    print(f"{level}: {count}")
